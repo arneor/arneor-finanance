@@ -22,7 +22,7 @@ export default function Header() {
         </button>
         <div>
           <h1 className="header-title">{pageTitle === 'Pnl' ? 'P&L Statement' : pageTitle}</h1>
-          <p className="text-xs text-muted-foreground hidden md:block">Arneor Labs Internal System</p>
+          <p className="header-subtitle text-xs text-muted-foreground hidden md:block">Arneor Labs Internal System</p>
         </div>
       </div>
 
