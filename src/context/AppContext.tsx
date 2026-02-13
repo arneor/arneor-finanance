@@ -142,6 +142,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, isLoggedIn: true, isLoading: true, authError: null }));
     try {
       // 1. Validate Email against Allowlist
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gapi = (window as any).gapi;
       const userInfoResponse = await gapi.client.request({
         path: 'https://www.googleapis.com/oauth2/v3/userinfo',
@@ -168,6 +169,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshTimer.current = setInterval(refreshData, 30000);
 
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       console.error('Init failed detailed:', JSON.stringify(err, null, 2));
       console.error('Init failed original:', err);
