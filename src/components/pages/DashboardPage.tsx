@@ -239,7 +239,7 @@ export default function DashboardPage() {
           icon={BarChart3}
           color={metrics.thisMonthProfitLoss >= 0 ? 'success' : 'danger'}
         />
-{/* Outstanding Loans Removed */}
+        {/* Outstanding Loans Removed */}
         <MetricCard
           title="Monthly Burn Rate (Product Dev)"
           value={formatCurrency(metrics.burnRate, true)}
@@ -330,8 +330,8 @@ export default function DashboardPage() {
                     <td colSpan={6} className="no-data-cell">No transactions yet</td>
                   </tr>
                 ) : (
-                  recentTransactions.map((t) => (
-                    <tr key={t.Transaction_ID}>
+                  recentTransactions.map((t, index) => (
+                    <tr key={`${t.Transaction_ID}-${index}`}>
                       <td>{formatDate(t.Date)}</td>
                       <td>
                         <span className={`type-badge ${t.Type === 'Income' ? 'type-income' : 'type-expense'}`}>
@@ -353,7 +353,7 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-{/* Upcoming Loans Removed */}
+        {/* Upcoming Loans Removed */}
       </div>
     </div>
   );

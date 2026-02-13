@@ -22,10 +22,11 @@ export default function PartnersPage() {
   const partnerStats = useMemo(() => {
     return partners.map((p) => {
       const pTxns = transactions.filter((t) => t.Partner_Account === p.Partner_ID);
-      const income = pTxns.filter((t) => t.Type === 'Income').reduce((s, t) => s + t.Amount, 0);
-      const expense = pTxns.filter((t) => t.Type === 'Expense').reduce((s, t) => s + t.Amount, 0);
+      const capitalAdded = pTxns
+        .filter((t) => t.Type === 'Income' && t.Category === 'Partner Capital Injection')
+        .reduce((s, t) => s + t.Amount, 0);
       const txCount = pTxns.length;
-      return { ...p, income, expense, txCount };
+      return { ...p, capitalAdded, txCount };
     });
   }, [partners, transactions]);
 
@@ -123,11 +124,7 @@ export default function PartnersPage() {
             <div className="partner-stats">
               <div className="partner-stat">
                 <span className="stat-label">Capital Added</span>
-                <span className="stat-value amount-positive">{formatCurrency(p.income)}</span>
-              </div>
-              <div className="partner-stat">
-                <span className="stat-label">Expenses Paid</span>
-                <span className="stat-value amount-negative">{formatCurrency(p.expense)}</span>
+                <span className="stat-value amount-positive">{formatCurrency(p.capitalAdded)}</span>
               </div>
               <div className="partner-stat">
                 <span className="stat-label">Txn History</span>
