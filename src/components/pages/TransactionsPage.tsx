@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { Card } from '@/components/ui/SharedComponents';
 import Modal from '@/components/ui/Modal';
 import { TransactionFilters, TransactionFormData } from '@/lib/types';
-import { addTransaction, deleteTransaction } from '@/lib/google-sheets';
+import { addTransaction, updateTransaction, deleteTransaction } from '@/lib/google-sheets';
 import {
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, PAYMENT_METHODS, CURRENCY_SYMBOL,
 } from '@/lib/constants';
@@ -19,6 +19,8 @@ import {
 export default function TransactionsPage() {
   const { transactions, partners, refreshData, addAlert } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTxId, setEditTxId] = useState<string | null>(null);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [sortField, setSortField] = useState<string>('Date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -125,6 +127,60 @@ export default function TransactionsPage() {
       await refreshData();
     } catch (err) {
       addAlert({ type: 'danger', title: 'Error', message: 'Failed to add transaction to Arneor database' });
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (index: number) => {
+    const t = paginated[index];
+    setEditTxId(t.Transaction_ID);
+    setForm({
+      Date: t.Date,
+      Type: t.Type,
+      Category: t.Category,
+      Amount: t.Amount.toString(),
+      Partner_Account: t.Partner_Account,
+      Description: t.Description,
+      Payment_Method: t.Payment_Method,
+      Tags: t.Tags,
+      Added_By: t.Added_By,
+    });
+    setErrors({});
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!validateForm() || !editTxId) return;
+    setSubmitting(true);
+    try {
+      const realIndex = transactions.findIndex((t) => t.Transaction_ID === editTxId);
+      if (realIndex === -1) throw new Error('Transaction not found');
+      const existing = transactions[realIndex];
+      await updateTransaction(realIndex, {
+        ...existing,
+        Date: form.Date,
+        Type: form.Type,
+        Category: form.Category,
+        Amount: parseFloat(form.Amount),
+        Partner_Account: form.Partner_Account,
+        Description: form.Description,
+        Payment_Method: form.Payment_Method,
+        Tags: form.Tags,
+        Added_By: form.Added_By,
+      });
+      addAlert({ type: 'success', title: 'Updated', message: 'Transaction updated successfully' });
+      setShowEditModal(false);
+      setEditTxId(null);
+      setForm({
+        Date: today(), Type: 'Expense', Category: '',
+        Amount: '', Partner_Account: '', Description: '',
+        Payment_Method: 'Bank Transfer', Tags: '', Added_By: '',
+      });
+      await refreshData();
+    } catch (err) {
+      addAlert({ type: 'danger', title: 'Error', message: 'Failed to update transaction' });
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -324,7 +380,7 @@ export default function TransactionsPage() {
                     <td>{t.Tags && <span className="tag">{t.Tags}</span>}</td>
                     <td>
                       <div className="action-cell">
-                        <button className="icon-btn" title="Edit"><Edit2 size={14} /></button>
+                        <button className="icon-btn" title="Edit" onClick={() => handleEdit(i)}><Edit2 size={14} /></button>
                         <button className="icon-btn danger" onClick={() => handleDelete(i)} title="Delete">
                           <Trash2 size={14} />
                         </button>
@@ -437,6 +493,88 @@ export default function TransactionsPage() {
           <button className="btn btn-outline" onClick={() => setShowAddModal(false)}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Adding...' : 'Add Transaction'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Edit Transaction Modal */}
+      <Modal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setEditTxId(null); }} title="Edit Transaction" size="lg">
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Date *</label>
+            <input type="date" value={form.Date}
+              onChange={(e) => setForm((f) => ({ ...f, Date: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Type *</label>
+            <div className="type-toggle">
+              <button
+                className={`toggle-btn ${form.Type === 'Income' ? 'active income' : ''}`}
+                onClick={() => setForm((f) => ({ ...f, Type: 'Income', Category: '' }))}
+              >
+                <ArrowUpRight size={16} /> Income
+              </button>
+              <button
+                className={`toggle-btn ${form.Type === 'Expense' ? 'active expense' : ''}`}
+                onClick={() => setForm((f) => ({ ...f, Type: 'Expense', Category: '' }))}
+              >
+                <ArrowDownRight size={16} /> Expense
+              </button>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Category *</label>
+            <select value={form.Category}
+              onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value }))}>
+              <option value="">Select Category</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {errors.Category && <span className="form-error">{errors.Category}</span>}
+          </div>
+          <div className="form-group">
+            <label>Amount ({CURRENCY_SYMBOL}) *</label>
+            <input type="number" step="0.01" placeholder="0.00" value={form.Amount}
+              onChange={(e) => setForm((f) => ({ ...f, Amount: e.target.value }))} />
+            {errors.Amount && <span className="form-error">{errors.Amount}</span>}
+          </div>
+          <div className="form-group">
+            <label>Partner Account *</label>
+            <select value={form.Partner_Account}
+              onChange={(e) => setForm((f) => ({ ...f, Partner_Account: e.target.value }))}>
+              <option value="">Select Partner</option>
+              {partners.map((p) => (
+                <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>
+              ))}
+            </select>
+            {errors.Partner_Account && <span className="form-error">{errors.Partner_Account}</span>}
+          </div>
+          <div className="form-group">
+            <label>Payment Method</label>
+            <select value={form.Payment_Method}
+              onChange={(e) => setForm((f) => ({ ...f, Payment_Method: e.target.value }))}>
+              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="form-group span-2">
+            <label>Description</label>
+            <input type="text" placeholder="Enter description" value={form.Description}
+              onChange={(e) => setForm((f) => ({ ...f, Description: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Tags</label>
+            <input type="text" placeholder="comma-separated tags" value={form.Tags}
+              onChange={(e) => setForm((f) => ({ ...f, Tags: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Added By</label>
+            <input type="text" placeholder="Your name" value={form.Added_By}
+              onChange={(e) => setForm((f) => ({ ...f, Added_By: e.target.value }))} />
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-outline" onClick={() => { setShowEditModal(false); setEditTxId(null); }}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleEditSubmit} disabled={submitting}>
+            {submitting ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </Modal>

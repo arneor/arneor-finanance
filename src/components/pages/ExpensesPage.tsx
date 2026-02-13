@@ -4,10 +4,10 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Card } from '@/components/ui/SharedComponents';
 import Modal from '@/components/ui/Modal';
-import { addTransaction } from '@/lib/google-sheets';
+import { addTransaction, updateTransaction } from '@/lib/google-sheets';
 import { EXPENSE_CATEGORIES, PAYMENT_METHODS, CURRENCY_SYMBOL, CHART_COLORS, CHART_PALETTE } from '@/lib/constants';
 import { formatCurrency, formatDate, today, getCategoryBreakdown, getMonthlyData } from '@/lib/utils';
-import { Plus, ArrowDownRight } from 'lucide-react';
+import { Plus, ArrowDownRight, Edit2 } from 'lucide-react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 
@@ -16,6 +16,8 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcEleme
 export default function ExpensesPage() {
   const { transactions, partners, refreshData, addAlert } = useApp();
   const [showAdd, setShowAdd] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTxId, setEditTxId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
 
@@ -34,6 +36,29 @@ export default function ExpensesPage() {
       setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
       await refreshData();
     } catch { addAlert({ type: 'danger', title: 'Error', message: 'Failed' }); }
+    setSubmitting(false);
+  };
+
+  const handleEdit = (t: typeof expenseTransactions[0]) => {
+    setEditTxId(t.Transaction_ID);
+    setForm({ Date: t.Date, Category: t.Category, Amount: t.Amount.toString(), Partner_Account: t.Partner_Account, Description: t.Description, Payment_Method: t.Payment_Method, Tags: t.Tags, Added_By: t.Added_By });
+    setShowEdit(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!form.Category || !form.Amount || !form.Partner_Account || !editTxId) return;
+    setSubmitting(true);
+    try {
+      const realIndex = transactions.findIndex((t) => t.Transaction_ID === editTxId);
+      if (realIndex === -1) throw new Error('Transaction not found');
+      const existing = transactions[realIndex];
+      await updateTransaction(realIndex, { ...existing, Date: form.Date, Type: 'Expense', Category: form.Category, Amount: parseFloat(form.Amount), Partner_Account: form.Partner_Account, Description: form.Description, Payment_Method: form.Payment_Method, Tags: form.Tags, Added_By: form.Added_By });
+      addAlert({ type: 'success', title: 'Updated', message: 'Expense transaction updated' });
+      setShowEdit(false);
+      setEditTxId(null);
+      setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
+      await refreshData();
+    } catch { addAlert({ type: 'danger', title: 'Error', message: 'Failed to update' }); }
     setSubmitting(false);
   };
 
@@ -62,9 +87,9 @@ export default function ExpensesPage() {
       <Card title="Expense Transactions">
         <div className="table-wrapper">
           <table className="data-table">
-            <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Partner</th><th>Description</th><th>Payment</th></tr></thead>
+            <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Partner</th><th>Description</th><th>Payment</th><th>Actions</th></tr></thead>
             <tbody>
-              {expenseTransactions.length === 0 ? <tr><td colSpan={6} className="no-data-cell">No expenses recorded</td></tr> :
+              {expenseTransactions.length === 0 ? <tr><td colSpan={7} className="no-data-cell">No expenses recorded</td></tr> :
                 expenseTransactions.slice(0, 50).map((t) => (
                   <tr key={t.Transaction_ID}>
                     <td>{formatDate(t.Date)}</td>
@@ -73,6 +98,11 @@ export default function ExpensesPage() {
                     <td>{partners.find((p) => p.Partner_ID === t.Partner_Account)?.Partner_Name || t.Partner_Account}</td>
                     <td className="desc-cell">{t.Description}</td>
                     <td>{t.Payment_Method}</td>
+                    <td>
+                      <div className="action-cell">
+                        <button className="icon-btn" title="Edit" onClick={() => handleEdit(t)}><Edit2 size={14} /></button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
             </tbody>
@@ -93,6 +123,22 @@ export default function ExpensesPage() {
         <div className="modal-actions">
           <button className="btn btn-outline" onClick={() => setShowAdd(false)}>Cancel</button>
           <button className="btn btn-primary" onClick={handleAdd} disabled={submitting}>{submitting ? 'Adding...' : 'Add Expense'}</button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showEdit} onClose={() => { setShowEdit(false); setEditTxId(null); }} title="Edit Expense" size="lg">
+        <div className="form-grid">
+          <div className="form-group"><label>Date</label><input type="date" value={form.Date} onChange={(e) => setForm((f) => ({ ...f, Date: e.target.value }))} /></div>
+          <div className="form-group"><label>Category *</label><select value={form.Category} onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value }))}><option value="">Select</option>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label>Amount ({CURRENCY_SYMBOL}) *</label><input type="number" step="0.01" value={form.Amount} onChange={(e) => setForm((f) => ({ ...f, Amount: e.target.value }))} /></div>
+          <div className="form-group"><label>Paid By Partner *</label><select value={form.Partner_Account} onChange={(e) => setForm((f) => ({ ...f, Partner_Account: e.target.value }))}><option value="">Select</option>{partners.map((p) => <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>)}</select></div>
+          <div className="form-group span-2"><label>Description</label><input type="text" value={form.Description} onChange={(e) => setForm((f) => ({ ...f, Description: e.target.value }))} /></div>
+          <div className="form-group"><label>Payment Method</label><select value={form.Payment_Method} onChange={(e) => setForm((f) => ({ ...f, Payment_Method: e.target.value }))}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+          <div className="form-group"><label>Added By</label><input type="text" value={form.Added_By} onChange={(e) => setForm((f) => ({ ...f, Added_By: e.target.value }))} /></div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn btn-outline" onClick={() => { setShowEdit(false); setEditTxId(null); }}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleEditSubmit} disabled={submitting}>{submitting ? 'Saving...' : 'Save Changes'}</button>
         </div>
       </Modal>
     </div>
