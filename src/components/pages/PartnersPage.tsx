@@ -20,10 +20,20 @@ export default function PartnersPage() {
   const totalFunds = partners.reduce((s, p) => s + p.Current_Balance, 0);
 
   const partnerStats = useMemo(() => {
+    // Get all Partner Capital Injection transactions
+    const capitalTxns = transactions.filter(
+      (t) => t.Type === 'Income' && t.Category === 'Partner Capital Injection'
+    );
+
     return partners.map((p) => {
       const pTxns = transactions.filter((t) => t.Partner_Account === p.Partner_ID);
-      const capitalAdded = pTxns
-        .filter((t) => t.Type === 'Income' && t.Category === 'Partner Capital Injection')
+      // Capital Added: sum transactions where this partner is the investor
+      const capitalAdded = capitalTxns
+        .filter((t) => {
+          const investorMatch = t.Tags?.match(/^investor:(.+)$/);
+          const investorId = investorMatch ? investorMatch[1] : t.Partner_Account;
+          return investorId === p.Partner_ID;
+        })
         .reduce((s, t) => s + t.Amount, 0);
       const txCount = pTxns.length;
       return { ...p, capitalAdded, txCount };

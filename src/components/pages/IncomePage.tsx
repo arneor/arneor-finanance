@@ -19,7 +19,9 @@ export default function IncomePage() {
   const [showEdit, setShowEdit] = useState(false);
   const [editTxId, setEditTxId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
+  const [form, setForm] = useState({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '', Investor: '' });
+
+  const isCapitalInjection = form.Category === 'Partner Capital Injection';
 
   const incomeTransactions = useMemo(() => transactions.filter((t) => t.Type === 'Income' && t.Transaction_ID).sort((a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime()), [transactions]);
   const breakdown = useMemo(() => getCategoryBreakdown(transactions, 'Income'), [transactions]);
@@ -28,12 +30,14 @@ export default function IncomePage() {
 
   const handleAdd = async () => {
     if (!form.Category || !form.Amount || !form.Partner_Account) return;
+    if (isCapitalInjection && !form.Investor) return;
     setSubmitting(true);
     try {
-      await addTransaction({ Date: form.Date, Type: 'Income', Category: form.Category, Amount: parseFloat(form.Amount), Partner_Account: form.Partner_Account, Description: form.Description, Payment_Method: form.Payment_Method, Tags: form.Tags, Added_By: form.Added_By });
+      const tags = isCapitalInjection ? `investor:${form.Investor}` : form.Tags;
+      await addTransaction({ Date: form.Date, Type: 'Income', Category: form.Category, Amount: parseFloat(form.Amount), Partner_Account: form.Partner_Account, Description: form.Description, Payment_Method: form.Payment_Method, Tags: tags, Added_By: form.Added_By });
       addAlert({ type: 'success', title: 'Added', message: 'Income recorded' });
       setShowAdd(false);
-      setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
+      setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '', Investor: '' });
       await refreshData();
     } catch { addAlert({ type: 'danger', title: 'Error', message: 'Failed' }); }
     setSubmitting(false);
@@ -41,22 +45,27 @@ export default function IncomePage() {
 
   const handleEdit = (t: typeof incomeTransactions[0]) => {
     setEditTxId(t.Transaction_ID);
-    setForm({ Date: t.Date, Category: t.Category, Amount: t.Amount.toString(), Partner_Account: t.Partner_Account, Description: t.Description, Payment_Method: t.Payment_Method, Tags: t.Tags, Added_By: t.Added_By });
+    const investorMatch = t.Tags?.match(/^investor:(.+)$/);
+    const investor = investorMatch ? investorMatch[1] : '';
+    setForm({ Date: t.Date, Category: t.Category, Amount: t.Amount.toString(), Partner_Account: t.Partner_Account, Description: t.Description, Payment_Method: t.Payment_Method, Tags: investorMatch ? '' : t.Tags, Added_By: t.Added_By, Investor: investor });
     setShowEdit(true);
   };
 
   const handleEditSubmit = async () => {
     if (!form.Category || !form.Amount || !form.Partner_Account || !editTxId) return;
+    const editIsCapitalInjection = form.Category === 'Partner Capital Injection';
+    if (editIsCapitalInjection && !form.Investor) return;
     setSubmitting(true);
     try {
       const realIndex = transactions.findIndex((t) => t.Transaction_ID === editTxId);
       if (realIndex === -1) throw new Error('Transaction not found');
       const existing = transactions[realIndex];
-      await updateTransaction(realIndex, { ...existing, Date: form.Date, Type: 'Income', Category: form.Category, Amount: parseFloat(form.Amount), Partner_Account: form.Partner_Account, Description: form.Description, Payment_Method: form.Payment_Method, Tags: form.Tags, Added_By: form.Added_By });
+      const tags = editIsCapitalInjection ? `investor:${form.Investor}` : form.Tags;
+      await updateTransaction(realIndex, { ...existing, Date: form.Date, Type: 'Income', Category: form.Category, Amount: parseFloat(form.Amount), Partner_Account: form.Partner_Account, Description: form.Description, Payment_Method: form.Payment_Method, Tags: tags, Added_By: form.Added_By });
       addAlert({ type: 'success', title: 'Updated', message: 'Income transaction updated' });
       setShowEdit(false);
       setEditTxId(null);
-      setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '' });
+      setForm({ Date: today(), Category: '', Amount: '', Partner_Account: '', Description: '', Payment_Method: 'Bank Transfer', Tags: '', Added_By: '', Investor: '' });
       await refreshData();
     } catch { addAlert({ type: 'danger', title: 'Error', message: 'Failed to update' }); }
     setSubmitting(false);
@@ -113,8 +122,11 @@ export default function IncomePage() {
       <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="Add Income" size="lg">
         <div className="form-grid">
           <div className="form-group"><label>Date</label><input type="date" value={form.Date} onChange={(e) => setForm((f) => ({ ...f, Date: e.target.value }))} /></div>
-          <div className="form-group"><label>Category *</label><select value={form.Category} onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value }))}><option value="">Select</option>{INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label>Category *</label><select value={form.Category} onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value, Investor: '' }))}><option value="">Select</option>{INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
           <div className="form-group"><label>Amount ({CURRENCY_SYMBOL}) *</label><input type="number" step="0.01" value={form.Amount} onChange={(e) => setForm((f) => ({ ...f, Amount: e.target.value }))} /></div>
+          {isCapitalInjection && (
+            <div className="form-group"><label>Invested By *</label><select value={form.Investor} onChange={(e) => setForm((f) => ({ ...f, Investor: e.target.value }))}><option value="">Select Investor</option>{partners.map((p) => <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>)}</select></div>
+          )}
           <div className="form-group"><label>Received By Partner *</label><select value={form.Partner_Account} onChange={(e) => setForm((f) => ({ ...f, Partner_Account: e.target.value }))}><option value="">Select</option>{partners.map((p) => <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>)}</select></div>
           <div className="form-group span-2"><label>Description</label><input type="text" value={form.Description} onChange={(e) => setForm((f) => ({ ...f, Description: e.target.value }))} /></div>
           <div className="form-group"><label>Payment Method</label><select value={form.Payment_Method} onChange={(e) => setForm((f) => ({ ...f, Payment_Method: e.target.value }))}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
@@ -129,8 +141,11 @@ export default function IncomePage() {
       <Modal isOpen={showEdit} onClose={() => { setShowEdit(false); setEditTxId(null); }} title="Edit Income" size="lg">
         <div className="form-grid">
           <div className="form-group"><label>Date</label><input type="date" value={form.Date} onChange={(e) => setForm((f) => ({ ...f, Date: e.target.value }))} /></div>
-          <div className="form-group"><label>Category *</label><select value={form.Category} onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value }))}><option value="">Select</option>{INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label>Category *</label><select value={form.Category} onChange={(e) => setForm((f) => ({ ...f, Category: e.target.value, Investor: '' }))}><option value="">Select</option>{INCOME_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
           <div className="form-group"><label>Amount ({CURRENCY_SYMBOL}) *</label><input type="number" step="0.01" value={form.Amount} onChange={(e) => setForm((f) => ({ ...f, Amount: e.target.value }))} /></div>
+          {form.Category === 'Partner Capital Injection' && (
+            <div className="form-group"><label>Invested By *</label><select value={form.Investor} onChange={(e) => setForm((f) => ({ ...f, Investor: e.target.value }))}><option value="">Select Investor</option>{partners.map((p) => <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>)}</select></div>
+          )}
           <div className="form-group"><label>Received By Partner *</label><select value={form.Partner_Account} onChange={(e) => setForm((f) => ({ ...f, Partner_Account: e.target.value }))}><option value="">Select</option>{partners.map((p) => <option key={p.Partner_ID} value={p.Partner_ID}>{p.Partner_Name}</option>)}</select></div>
           <div className="form-group span-2"><label>Description</label><input type="text" value={form.Description} onChange={(e) => setForm((f) => ({ ...f, Description: e.target.value }))} /></div>
           <div className="form-group"><label>Payment Method</label><select value={form.Payment_Method} onChange={(e) => setForm((f) => ({ ...f, Payment_Method: e.target.value }))}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
