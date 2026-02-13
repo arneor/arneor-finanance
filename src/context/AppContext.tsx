@@ -148,8 +148,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         path: 'https://www.googleapis.com/oauth2/v3/userinfo',
       });
 
-      const userEmail = userInfoResponse.result.email;
-      const ALLOWED_EMAILS = ['lalnidhinp02@gmail.com', 'Infovahabkp@gmail.com']; // Add more emails here as needed
+      const userEmail = userInfoResponse.result.email.toLowerCase();
+      // Normalized to lowercase for case-insensitive comparison
+      const ALLOWED_EMAILS = [
+        'lalnidhinp02@gmail.com',
+        'infovahabkp@gmail.com',
+      ];
 
       if (!ALLOWED_EMAILS.includes(userEmail)) {
         throw new Error(`Access Denied: Email ${userEmail} is not authorized.`);

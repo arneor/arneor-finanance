@@ -169,6 +169,10 @@ export function initTokenClient(
         };
 
         localStorage.setItem('gapi_token', JSON.stringify(tokenData));
+
+        // CRITAL FIX: Set successful token to gapi client immediately
+        // allowing immediate requests (like userinfo) to succeed.
+        gapi.client.setToken(response);
       }
       onSuccess();
     },
